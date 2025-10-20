@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CBT Siswa SMPN 10 BANAWA SELATAN - Sistem Ujian Online</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(to bottom right, #e0f2fe, #c7d2fe);
+      font-family: "Inter", sans-serif;
+    }
+    .question-card {
+      transition: all 0.4s ease;
+    }
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col justify-center items-center p-4">
+  <main class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden">
+    <!-- Header -->
+    <header class="bg-blue-700 text-white flex items-center justify-center py-4 relative">
+      <!-- Logo Sekolah -->
+      <img src="smpn10.jpg" 
+           alt="Logo SMPN 10 BANAWA SELATAN" 
+           class="absolute left-4 top-1/2 transform -translate-y-1/2 h-14 w-14 rounded-full border-2 border-white shadow-md bg-white object-contain">
+
+      <div class="text-center">
+        <h1 class="text-2xl font-bold">CBT Siswa SMPN 10 BANAWA SELATAN</h1>
+        <p class="text-sm opacity-90">Simulasi Ujian Online</p>
+      </div>
+    </header>
+
+    <!-- Form Identitas -->
+    <section id="loginForm" class="p-6">
+      <h2 class="text-xl font-semibold mb-4 text-gray-700 text-center">Identitas Siswa</h2>
+      <label class="block font-semibold mb-1">Nama:</label>
+      <input id="studentName" type="text" class="border p-2 w-full rounded mb-3" placeholder="Nama siswa" />
+
+      <label class="block font-semibold mb-1">NISN:</label>
+      <input id="studentId" type="text" class="border p-2 w-full rounded mb-3" placeholder="Nomor Induk Siswa Nasional" />
+
+      <label class="block font-semibold mb-1">Kelas:</label>
+      <select id="studentGrade" class="border p-2 w-full rounded mb-4">
+        <option value="">Pilih Kelas</option>
+        <option value="7">Kelas 7</option>
+        <option value="8">Kelas 8</option>
+        <option value="9">Kelas 9</option>
+      </select>
+
+      <button onclick="loadQuestions()" class="bg-blue-600 hover:bg-blue-700 text-white w-full py-2 rounded font-semibold">
+        Mulai Ujian
+      </button>
+    </section>
+
+    <!-- Ujian -->
+    <section id="examSection" class="hidden p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">Ujian Dimulai</h2>
+        <div id="timerDisplay" class="text-lg font-bold text-red-600 bg-red-100 px-3 py-1 rounded"></div>
+      </div>
+
+      <div id="questionContainer" class="question-card"></div>
+
+      <!-- Navigasi Soal -->
+      <div class="flex justify-between mt-6">
+        <button id="prevBtn" onclick="prevQuestion()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">← Sebelumnya</button>
+        <button id="nextBtn" onclick="nextQuestion()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Berikutnya →</button>
+      </div>
+
+      <button id="finishBtn" onclick="confirmFinishExam()" class="hidden mt-6 bg-green-600 hover:bg-green-700 text-white w-full py-2 rounded font-semibold">
+        Selesai Ujian
+      </button>
+      <p id="statusMsg" class="text-center text-green-600 font-semibold mt-3"></p>
+    </section>
+
+    <!-- Hasil -->
+    <section id="resultSection" class="hidden text-center p-8">
+      <h2 class="text-2xl font-bold text-gray-700 mb-3">Hasil Ujian</h2>
+      <p id="scoreText" class="text-lg font-semibold text-gray-800"></p>
+      <p id="remarkText" class="text-xl font-bold mt-2"></p>
+    </section>
+  </main>
+
+  <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzHeUNA4osCRo4zC2urGtsndm5jURSHNbv0l3Q2EP8DOKf73DNqNMfDI2Hj6l4vkUBjfw/exec";
+    const WAKTU_UJIAN_MENIT = 30;
+
+    let student = {};
+    let questions = [];
+    let currentQuestion = 0;
+    let timerInterval;
+    let waktuSisa = WAKTU_UJIAN_MENIT * 60;
+
+    // === Load Soal ===
+    async function loadQuestions() {
+      const name = document.getElementById("studentName").value.trim();
+      const id = document.getElementById("studentId").value.trim();
+      const grade = document.getElementById("studentGrade").value.trim();
+
+      if (!name || !id || !grade) {
+        alert("Lengkapi semua data siswa!");
+        return;
+      }
+
+      student = { name, id, grade };
+      document.getElementById("loginForm").classList.add("hidden");
+      document.getElementById("examSection").classList.remove("hidden");
+
+      try {
+        const sheetName = "Kelas " + grade;
+        const url = `${SCRIPT_URL}?sheet=${encodeURIComponent(sheetName)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        questions = shuffleArray(data.filter(row => row.Pertanyaan));
+
+        showQuestion(currentQuestion);
+        startTimer();
+      } catch (error) {
+        console.error(error);
+        alert("Gagal memuat soal. Periksa koneksi internet atau izin file.");
+      }
+    }
+
+    // === Tampilkan Soal ===
+    function showQuestion(index) {
+      const q = questions[index];
+      const container = document.getElementById("questionContainer");
+      container.innerHTML = "";
+
+      let html = `<p class='text-gray-800 font-semibold mb-3'><b>${index + 1}.</b> ${q.Pertanyaan}</p>`;
+      if (q["Link Gambar"]) html += `<img src="${q["Link Gambar"]}" class="w-full max-h-64 object-contain rounded mb-3">`;
+      if (q["Link Video"]) html += `<div class="mb-3"><iframe width="100%" height="200" src="${q["Link Video"]}" frameborder="0" allowfullscreen></iframe></div>`;
+
+      ["A", "B", "C", "D"].forEach(opt => {
+        html += `<label class='block border rounded px-3 py-2 mb-2 hover:bg-blue-50'>
+          <input type='radio' name='jawaban${index}' value='${opt}' class='mr-2'>
+          ${opt}. ${q[opt]}
+        </label>`;
+      });
+
+      container.innerHTML = html;
+
+      document.getElementById("prevBtn").disabled = index === 0;
+      document.getElementById("nextBtn").classList.toggle("hidden", index === questions.length - 1);
+      document.getElementById("finishBtn").classList.toggle("hidden", index !== questions.length - 1);
+    }
+
+    // === Navigasi Soal ===
+    function nextQuestion() {
+      simpanJawaban(currentQuestion);
+      currentQuestion++;
+      showQuestion(currentQuestion);
+    }
+
+    function prevQuestion() {
+      simpanJawaban(currentQuestion);
+      currentQuestion--;
+      showQuestion(currentQuestion);
+    }
+
+    // === Simpan Jawaban sementara ===
+    function simpanJawaban(index) {
+      const selected = document.querySelector(`input[name='jawaban${index}']:checked`);
+      if (selected) questions[index].jawabanSiswa = selected.value;
+    }
+
+    // === Acak Soal ===
+    function shuffleArray(array) {
+      return array.sort(() => Math.random() - 0.5);
+    }
+
+    // === Timer ===
+    function startTimer() {
+      updateTimerDisplay();
+      timerInterval = setInterval(() => {
+        waktuSisa--;
+        updateTimerDisplay();
+        if (waktuSisa <= 0) {
+          clearInterval(timerInterval);
+          alert("Waktu ujian habis! Jawaban akan dikirim otomatis.");
+          finishExam();
+        }
+      }, 1000);
+    }
+
+    function updateTimerDisplay() {
+      const m = Math.floor(waktuSisa / 60);
+      const s = waktuSisa % 60;
+      document.getElementById("timerDisplay").innerText = `${m}:${s.toString().padStart(2, "0")}`;
+    }
+
+    // === Konfirmasi Sebelum Kirim ===
+    function confirmFinishExam() {
+      const yakin = confirm("Apakah kamu yakin ingin mengakhiri ujian?");
+      if (yakin) {
+        clearInterval(timerInterval);
+        finishExam();
+      }
+    }
+
+    // === Kirim Hasil ===
+    async function finishExam() {
+      simpanJawaban(currentQuestion);
+
+      let benarCount = 0;
+      questions.forEach(q => {
+        const kunci = q["Jawaban Benar"]?.trim().toUpperCase() || "";
+        if (q.jawabanSiswa === kunci) benarCount++;
+      });
+
+      const total = questions.length;
+      const skor = Math.round((benarCount / total) * 100);
+      const ket = skor >= 75 ? "LULUS 🎉" : "BELUM LULUS 😔";
+
+      await submitToSheets(questions, skor);
+
+      document.getElementById("examSection").classList.add("hidden");
+      document.getElementById("resultSection").classList.remove("hidden");
+      document.getElementById("scoreText").innerText = `Skor: ${skor} (${benarCount} benar dari ${total})`;
+      document.getElementById("remarkText").innerText = ket;
+    }
+
+    async function submitToSheets(soal, skor) {
+      try {
+        const payload = { nama: student.name, nis: student.id, kelas: student.grade, jawabanSiswa: soal, skor };
+        const res = await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload) });
+        const result = await res.json();
+        document.getElementById("statusMsg").innerText = result.message || "Data tersimpan.";
+      } catch (error) {
+        console.error(error);
+        alert("Gagal mengirim data ke Spreadsheet.");
+      }
+    }
+  </script>
+</body>
+</html>
